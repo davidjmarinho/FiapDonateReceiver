@@ -58,3 +58,6 @@ nunit-*.xml
 
 # Subagent-driven-development scratch progress ledger
 .superpowers/
+
+# Kubernetes secrets
+k8s/secret.yaml

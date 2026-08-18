@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fiapdonatereceiver-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fiapdonatereceiver-worker
+  template:
+    metadata:
+      labels:
+        app: fiapdonatereceiver-worker
+    spec:
+      containers:
+        - name: worker
+          image: fiapdonatereceiver-worker:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: fiapdonatereceiver-worker-config
+            - secretRef:
+                name: fiapdonatereceiver-worker-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
