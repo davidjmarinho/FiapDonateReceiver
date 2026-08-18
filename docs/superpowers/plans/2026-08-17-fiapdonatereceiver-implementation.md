@@ -6,7 +6,9 @@
 
 **Architecture:** A single ASP.NET Core Minimal API host (`FiapDonateReceiver.Worker`) runs a MassTransit/RabbitMQ consumer in the background and exposes `/health` and `/metrics` over HTTP. Business rules live in a dependency-free `FiapDonateReceiver.Domain` project; PostgreSQL persistence lives in `FiapDonateReceiver.Infrastructure`, which maps the shared `Campanhas` table (owned by the separate API repository) and owns a new `Doacoes` table.
 
-**Tech Stack:** .NET 8 (LTS), MassTransit 9.2.0 + RabbitMQ.Client 7.2.1, EF Core 8 + Npgsql, PostgreSQL, RabbitMQ, prometheus-net, xUnit, Docker, Kubernetes, GitHub Actions.
+**Tech Stack:** .NET 8 (LTS), MassTransit 8.5.10 + RabbitMQ.Client 7.2.1, EF Core 8 + Npgsql, PostgreSQL, RabbitMQ, prometheus-net, xUnit, Docker, Kubernetes, GitHub Actions.
+
+> **Post-implementation correction (Task 10):** this plan originally specified MassTransit **9.2.0**, verified only by `dotnet build` in a throwaway probe. Task 10's end-to-end run discovered that MassTransit 9.x is a commercial product that refuses to start the bus at runtime without a paid license (`MassTransit.ConfigurationException: License must be specified...`) — a failure a compile-only check cannot catch. The implementation was corrected to **MassTransit 8.5.10** (the last open-source release); no source code changes were needed, only the two `PackageReference` versions in `FiapDonateReceiver.Worker.csproj`. All `9.2.0` references below are historical — use `8.5.10`.
 
 ## Global Constraints
 
