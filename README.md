@@ -14,6 +14,16 @@ Veja `docs/superpowers/specs/2026-08-17-fiapdonatereceiver-design.md` para o
 desenho completo (decisões de arquitetura, modelo de dados, contrato do
 evento e regras de negócio).
 
+> **Contrato entre repositórios (`Campanhas.Status`):** a tabela `Campanhas` é
+> escrita pelo repositório da API, não por este Worker. Este Worker lê a
+> coluna `Status` como texto e espera exatamente os nomes dos membros do enum
+> `CampanhaStatus` (`Ativa`, `Concluida`, `Cancelada`), sem variação de caixa,
+> sem valor inteiro e sem outro vocabulário. Qualquer divergência entre os
+> dois repositórios faz com que a campanha afetada deixe de ser reconhecida
+> como ativa e todas as doações a ela sejam rejeitadas silenciosamente. Veja
+> o comentário em `ReceiverDbContext.OnModelCreating` (mapeamento de
+> `Campanha`).
+
 ## Pré-requisitos
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
@@ -36,13 +46,20 @@ evento e regras de negócio).
    dotnet tool restore
    ```
 
-3. Aplique as migrations do banco (cria a tabela `Doacoes`):
+3. (Opcional) Aplique as migrations do banco manualmente (cria a tabela
+   `Doacoes`):
 
    ```bash
    dotnet ef database update --project src/FiapDonateReceiver.Infrastructure/FiapDonateReceiver.Infrastructure.csproj --startup-project src/FiapDonateReceiver.Infrastructure/FiapDonateReceiver.Infrastructure.csproj
    ```
 
-   > A tabela `Campanhas` não é criada por este comando — ela pertence ao
+   > Este passo é opcional: o Worker aplica automaticamente as migrations
+   > pendentes na inicialização (`dbContext.Database.MigrateAsync()` em
+   > `Program.cs`), então basta rodar o passo 4 abaixo. Use este comando
+   > manual se quiser aplicar as migrations sem subir o Worker (por exemplo,
+   > para inspecionar o schema antes de rodar o serviço).
+   >
+   > A tabela `Campanhas` não é criada por este comando (nem pelo Worker) — ela pertence ao
    > repositório da API. Para testar este Worker isoladamente (sem a API no
    > ar), crie manualmente uma linha de teste, por exemplo via `psql`:
    >
@@ -68,6 +85,17 @@ evento e regras de negócio).
    curl http://localhost:8080/health
    curl http://localhost:8080/metrics
    ```
+
+   > O serviço expõe três endpoints de health check, pensados para uso
+   > separado em liveness vs. readiness probes do Kubernetes:
+   >
+   > - `/health/live` — só confirma que o processo está de pé, sem checar
+   >   dependências externas. Usado pela `livenessProbe` (`k8s/deployment.yaml`):
+   >   uma falha aqui gera restart do pod, o que não faz sentido se o problema
+   >   for uma dependência externa fora do ar.
+   > - `/health/ready` — checa PostgreSQL e RabbitMQ. Usado pela
+   >   `readinessProbe`: uma falha aqui tira o pod de circulação sem reiniciá-lo.
+   > - `/health` — mantido como alias de `/health/ready`, por compatibilidade.
 
 ## Testando o fluxo fim a fim (sem depender da API estar no ar)
 

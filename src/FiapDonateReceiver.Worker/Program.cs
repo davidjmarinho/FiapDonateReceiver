@@ -1,6 +1,7 @@
 using FiapDonateReceiver.Infrastructure;
 using FiapDonateReceiver.Worker.Consumers;
 using MassTransit;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using RabbitMQ.Client;
@@ -49,14 +50,46 @@ builder.Services.AddSingleton<IConnection>(sp =>
     return factory.CreateConnectionAsync().GetAwaiter().GetResult();
 });
 
+// Tags "ready" marcam os checks que dependem de infraestrutura externa
+// (Postgres/RabbitMQ). Eles alimentam apenas /health/ready: uma indisponibilidade
+// transitória dessas dependências deve tirar o pod de circulação (readiness),
+// mas NAO deve derrubar o processo via liveness - reiniciar o pod nao conserta
+// uma dependencia externa fora do ar.
 builder.Services.AddHealthChecks()
-    .AddNpgSql(connectionString, name: "postgresql")
-    .AddRabbitMQ(name: "rabbitmq");
+    .AddNpgSql(connectionString, name: "postgresql", tags: new[] { "ready" })
+    .AddRabbitMQ(name: "rabbitmq", tags: new[] { "ready" });
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ReceiverDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
 app.MapGet("/", () => Results.Ok(new { service = "FiapDonateReceiver.Worker", status = "running" }));
-app.MapHealthChecks("/health");
+
+// /health/live: apenas confirma que o processo esta de pe (nenhum check de
+// dependencia externa e executado) - usado pela liveness probe.
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+
+// /health/ready: executa os checks marcados com a tag "ready" (Postgres,
+// RabbitMQ) - usado pela readiness probe.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+
+// Alias mantido por compatibilidade com integracoes existentes (equivalente a
+// /health/ready).
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+
 app.UseHttpMetrics();
 app.MapMetrics();
 
