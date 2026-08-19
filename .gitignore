@@ -61,3 +61,6 @@ nunit-*.xml
 
 # Kubernetes secrets
 k8s/secret.yaml
+
+# Visual Studio IDE cache
+.vs/
