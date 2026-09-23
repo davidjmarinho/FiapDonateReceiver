@@ -55,3 +55,12 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Subagent-driven-development scratch progress ledger
+.superpowers/
+
+# Kubernetes secrets
+k8s/secret.yaml
+
+# Visual Studio IDE cache
+.vs/
